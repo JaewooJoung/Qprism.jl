@@ -21,7 +21,7 @@ using Printf
 using AbstractTrees
 using TOML
 using HTTP
-using SMTPClient
+using Sendmail
 
 export qprismrun
 
