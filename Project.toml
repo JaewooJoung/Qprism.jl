@@ -11,9 +11,8 @@ Gumbo = "708ec375-b3d6-5a57-a7ce-8257bf98657a"
 HTTP = "cd3eb016-35fb-5094-929b-558a96fad6f3"
 JSON3 = "0f8b85d8-7281-11e9-16c2-39a750bddbf1"
 Printf = "de0858da-6303-5e67-8744-51eddeeeb8d7"
-Sendmail = "b6c20d80-9ac6-11ea-36eb-0d4c64867c77"
 TOML = "fa267f1f-6049-4f14-aa54-33bafae1ed76"
-WebDriver = "2f4c9c9f-3c3f-4bf4-9d87-65f0a02aafc0"
+WebDriver = "05625dda-b54a-434a-8c43-5c7937dfa4f0"
 
 [compat]
 julia = "1.6"
