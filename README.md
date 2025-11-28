@@ -1,7 +1,5 @@
 # Qprism.jl
 
-# QPrism
-
 **Volvo Supplier Quality Notification System**
 
 QPrism is a Julia-based tool for monitoring Volvo supplier quality metrics, generating dashboards, and sending email notifications.
