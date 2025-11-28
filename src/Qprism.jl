@@ -21,7 +21,7 @@ using Printf
 using AbstractTrees
 using TOML
 using HTTP
-using Sendmail
+using SMTPClient
 
 export qprismrun
 
@@ -927,16 +927,33 @@ function send_notifications(workspace::String, notifications::Vector)
     
     config_path = joinpath(workspace, "conf", "config.toml")
     
+    # Load SMTP config
+    smtp_server = "smtp.gmail.com"
+    smtp_port = 587
+    smtp_user = ""
+    smtp_pass = ""
+    
     if isfile(config_path)
         try
-            Sendmail.configure(config_path)
-            println("✓ SMTP configured")
+            config = TOML.parsefile(config_path)
+            smtp_section = get(config, "smtp", Dict())
+            smtp_server = get(smtp_section, "server", smtp_server)
+            smtp_port = get(smtp_section, "port", smtp_port)
+            smtp_user = get(smtp_section, "username", "")
+            smtp_pass = get(smtp_section, "password", "")
+            println("✓ SMTP config loaded")
         catch e
             println("⚠️  SMTP config error: $e")
             return 0
         end
     else
         println("❌ config.toml not found - cannot send emails")
+        println("   Create: $(config_path)")
+        return 0
+    end
+    
+    if isempty(smtp_user) || isempty(smtp_pass)
+        println("❌ SMTP credentials not configured in config.toml")
         return 0
     end
     
@@ -947,7 +964,28 @@ function send_notifications(workspace::String, notifications::Vector)
         println("   Subject: $(notif["subject"])")
         
         try
-            Sendmail.send(notif["recipient"], notif["subject"], notif["body"]; ishtml=true)
+            # Build email body with headers
+            body_with_headers = """From: QPrism <$(smtp_user)>
+To: $(notif["recipient"])
+Subject: $(notif["subject"])
+MIME-Version: 1.0
+Content-Type: text/html; charset=UTF-8
+
+$(notif["body"])"""
+            
+            # Create options for SMTPClient
+            opt = SendOptions(
+                isSSL = true,
+                username = smtp_user,
+                passwd = smtp_pass
+            )
+            
+            # Build URL
+            url = "smtps://$(smtp_server):465"
+            
+            # Send email
+            resp = send(url, [notif["recipient"]], smtp_user, IOBuffer(body_with_headers), opt)
+            
             println("   ✅ Sent")
             sent += 1
         catch e
