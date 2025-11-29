@@ -943,16 +943,32 @@ function send_notifications(workspace::String, notifications::Vector)
     
     config_path = joinpath(workspace, "conf", "config.toml")
     
-    if isfile(config_path)
-        try
-            Sendmail.configure(config_path)
-            println("✓ SMTP configured")
-        catch e
-            println("⚠️  SMTP config error: $e")
-            return 0
-        end
-    else
+    if !isfile(config_path)
         println("❌ config.toml not found - cannot send emails")
+        println("   Expected at: $config_path")
+        return 0
+    end
+    
+    #= Read and display config for debugging =#
+    println("📄 Config file: $config_path")
+    try
+        config_data = TOML.parsefile(config_path)
+        smtp = get(config_data, "smtp", Dict())
+        sender = get(config_data, "sender", Dict())
+        println("   SMTP Server: $(get(smtp, "server", "NOT SET"))")
+        println("   SMTP Port: $(get(smtp, "port", "NOT SET"))")
+        println("   Use SSL: $(get(smtp, "use_ssl", "NOT SET"))")
+        println("   Sender: $(get(sender, "display_email", "NOT SET"))")
+    catch e
+        println("   ⚠️  Could not read config: $e")
+    end
+    
+    #= Configure Sendmail =#
+    try
+        Sendmail.configure(config_path)
+        println("✅ SMTP configured successfully")
+    catch e
+        println("❌ SMTP config error: $e")
         return 0
     end
     
@@ -971,13 +987,19 @@ function send_notifications(workspace::String, notifications::Vector)
                 priority=notif["priority"]
             )
             if success
-                println("   ✅ Sent")
+                println("   ✅ Sent successfully")
                 sent += 1
             else
-                println("   ❌ Failed to send")
+                println("   ❌ send_email returned false")
             end
         catch e
-            println("   ❌ Failed: $e")
+            println("   ❌ Exception: $e")
+            #= Print more details =#
+            println("   Stack trace:")
+            for (exc, bt) in Base.catch_stack()
+                showerror(stdout, exc, bt)
+                println()
+            end
         end
         sleep(0.5)
     end
