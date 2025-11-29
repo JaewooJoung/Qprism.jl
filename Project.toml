@@ -13,7 +13,6 @@ JSON3 = "0f8b85d8-7281-11e9-16c2-39a750bddbf1"
 Printf = "de0858da-6303-5e67-8744-51eddeeeb8d7"
 TOML = "fa267f1f-6049-4f14-aa54-33bafae1ed76"
 WebDriver = "05625dda-b54a-434a-8c43-5c7937dfa4f0"
-SMTPClient = "80a5b449-b9dc-5cea-adf7-6c68e3d580ae"
 
 [compat]
 julia = "1.6"
