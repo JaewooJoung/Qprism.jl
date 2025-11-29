@@ -963,9 +963,19 @@ function send_notifications(workspace::String, notifications::Vector)
         println("   Subject: $(notif["subject"])")
         
         try
-            Sendmail.send(notif["recipient"], notif["subject"], notif["body"]; ishtml=true)
-            println("   ✅ Sent")
-            sent += 1
+            #= Use Sendmail.send_email with priority parameter =#
+            success = Sendmail.send_email(
+                notif["recipient"], 
+                notif["subject"], 
+                notif["body"],
+                priority=notif["priority"]
+            )
+            if success
+                println("   ✅ Sent")
+                sent += 1
+            else
+                println("   ❌ Failed to send")
+            end
         catch e
             println("   ❌ Failed: $e")
         end
