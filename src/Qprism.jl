@@ -5,7 +5,7 @@
 #┃ 🧾Details   🔎 Web scraping, dashboard generation, and email notifications        ┃
 #┃ 🚩OAuthor   🦋 Original Author: Jaewoo Joung/정재우/郑在祐                         ┃
 #┃ 👨‍🔧LAuthor   👤 Last Author: Jaewoo Joung                                         ┃
-#┃ 📆LastDate  📍 2025-11-28 🔄Please support to keep update🔄                       ┃
+#┃ 📆LastDate  📍 2025-11-29 🔄Please support to keep update🔄                       ┃
 #┃ 🏭License   📜 JSD:Just Simple Distribution(Jaewoo's Simple Distribution)         ┃
 #┃ ✅Guarantee ⚠️ Explicitly UN-guaranteed                                           ┃
 #┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
@@ -35,7 +35,7 @@ const REQUEST_DELAY = 2
 const PAGE_LOAD_TIMEOUT = 60
 const DEFAULT_WEBDRIVER_PORT = 9515
 
-# Remote config URLs
+#= Remote config URLs =#
 const CONFIG_URLS = Dict(
     "config.toml" => "https://jaewoojoung.github.io/volv/conf/config.toml",
     "suppliers.toml" => "https://jaewoojoung.github.io/volv/conf/suppliers.toml",
@@ -47,11 +47,8 @@ const CONFIG_URLS = Dict(
    INITIALIZATION - Download config files if missing
    ═══════════════════════════════════════════════════════════════════════════════════ =#
 
-"""
-    get_workspace_dir()
-
-Get or create the QPrism workspace directory in user's home.
-"""
+#= get_workspace_dir()
+   Get or create the QPrism workspace directory in user's home. =#
 function get_workspace_dir()
     if Sys.iswindows()
         base = get(ENV, "USERPROFILE", homedir())
@@ -63,15 +60,12 @@ function get_workspace_dir()
     return workspace
 end
 
-"""
-    init_workspace()
-
-Initialize workspace by creating directories and downloading config files if missing.
-"""
+#= init_workspace()
+   Initialize workspace by creating directories and downloading config files if missing. =#
 function init_workspace()
     workspace = get_workspace_dir()
     
-    # Create subdirectories
+    #= Create subdirectories =#
     for dir in ["conf", "temp", "data", "dashboard", "dashboard/suppliers"]
         dir_path = joinpath(workspace, dir)
         if !isdir(dir_path)
@@ -80,7 +74,7 @@ function init_workspace()
         end
     end
     
-    # Download config files if missing
+    #= Download config files if missing =#
     files_to_download = [
         ("conf/config.toml", CONFIG_URLS["config.toml"]),
         ("conf/suppliers.toml", CONFIG_URLS["suppliers.toml"]),
@@ -114,11 +108,8 @@ function init_workspace()
     return workspace
 end
 
-"""
-    create_default_file(path, filename)
-
-Create default config file if download fails.
-"""
+#= create_default_file(path, filename)
+   Create default config file if download fails. =#
 function create_default_file(path, filename)
     if occursin("suppliers.toml", filename)
         content = """
@@ -301,11 +292,8 @@ end
    SUPPLIER DATA LOADING
    ═══════════════════════════════════════════════════════════════════════════════════ =#
 
-"""
-    load_suppliers_config(workspace)
-
-Load PARMA codes and email from suppliers.toml
-"""
+#= load_suppliers_config(workspace)
+   Load PARMA codes and email from suppliers.toml =#
 function load_suppliers_config(workspace::String)
     config_path = joinpath(workspace, "conf", "suppliers.toml")
     
@@ -317,7 +305,7 @@ function load_suppliers_config(workspace::String)
     try
         data = TOML.parsefile(config_path)
         
-        # Extract PARMA codes
+        #= Extract PARMA codes =#
         parma_codes = Int[]
         for supplier in get(data, "suppliers", [])
             codes = get(supplier, "parma_codes", Int[])
@@ -325,7 +313,7 @@ function load_suppliers_config(workspace::String)
         end
         parma_codes = unique(parma_codes)
         
-        # Extract email
+        #= Extract email =#
         myemail_section = get(data, "myemail", Dict())
         myemail = get(myemail_section, "myemail", "")
         
@@ -354,11 +342,8 @@ end
    CHROMEDRIVER MANAGEMENT
    ═══════════════════════════════════════════════════════════════════════════════════ =#
 
-"""
-    launch_chromedriver(; port)
-
-Launch ChromeDriver as background process.
-"""
+#= launch_chromedriver(; port)
+   Launch ChromeDriver as background process. =#
 function launch_chromedriver(; port::Int = DEFAULT_WEBDRIVER_PORT)::Bool
     println("🚀 Launching ChromeDriver on port $port...")
     
@@ -374,7 +359,7 @@ function launch_chromedriver(; port::Int = DEFAULT_WEBDRIVER_PORT)::Bool
         println("⏳ Waiting for ChromeDriver...")
         sleep(3)
         
-        # Verify server
+        #= Verify server =#
         for attempt in 1:3
             try
                 capabilities = Capabilities("chrome")
@@ -394,11 +379,8 @@ function launch_chromedriver(; port::Int = DEFAULT_WEBDRIVER_PORT)::Bool
     end
 end
 
-"""
-    terminate_chromedriver()
-
-Terminate ChromeDriver processes.
-"""
+#= terminate_chromedriver()
+   Terminate ChromeDriver processes. =#
 function terminate_chromedriver()
     try
         if Sys.iswindows()
@@ -411,11 +393,8 @@ function terminate_chromedriver()
     end
 end
 
-"""
-    create_chrome_session(; port, headless)
-
-Create Chrome WebDriver session.
-"""
+#= create_chrome_session(; port, headless)
+   Create Chrome WebDriver session. =#
 function create_chrome_session(; port::Int = DEFAULT_WEBDRIVER_PORT, headless::Bool = true)
     try
         chrome_args = [
@@ -454,11 +433,8 @@ end
    WEB SCRAPING
    ═══════════════════════════════════════════════════════════════════════════════════ =#
 
-"""
-    scrape_supplier(session, parma_code)
-
-Scrape supplier scorecard HTML.
-"""
+#= scrape_supplier(session, parma_code)
+   Scrape supplier scorecard HTML. =#
 function scrape_supplier(session, parma_code::Int)
     url = "$SCORECARD_URL?SupplierId=$parma_code"
     println("   🌐 Loading: $url")
@@ -484,11 +460,8 @@ function scrape_supplier(session, parma_code::Int)
     end
 end
 
-"""
-    scrape_all_suppliers(workspace, parma_codes; headless)
-
-Scrape all suppliers and save HTML files.
-"""
+#= scrape_all_suppliers(workspace, parma_codes; headless)
+   Scrape all suppliers and save HTML files. =#
 function scrape_all_suppliers(workspace::String, parma_codes::Vector{Int}; headless::Bool = true)
     println("\n" * "="^60)
     println("📡 VSIB SUPPLIER SCRAPER")
@@ -550,11 +523,8 @@ end
 extract_text(elem) = isnothing(elem) ? "N/A" : (t = strip(nodeText(elem)); isempty(t) ? "N/A" : t)
 get_attr(elem, attr::String) = isnothing(elem) ? "" : get(attrs(elem), attr, "")
 
-"""
-    parse_supplier_html(html_path)
-
-Parse supplier HTML file and extract data.
-"""
+#= parse_supplier_html(html_path)
+   Parse supplier HTML file and extract data. =#
 function parse_supplier_html(html_path::String)
     println("📄 Parsing: $(basename(html_path))")
     
@@ -570,7 +540,7 @@ function parse_supplier_html(html_path::String)
         "audits" => [], "certifications" => []
     )
     
-    # Extract supplier info
+    #= Extract supplier info =#
     supplier_link = eachmatch(Selector("a[href*='SupplierInformation.aspx']"), doc.root)
     if !isempty(supplier_link)
         supplier_info = extract_text(first(supplier_link))
@@ -582,11 +552,11 @@ function parse_supplier_html(html_path::String)
         end
     end
     
-    # Extract logo
+    #= Extract logo =#
     logo_elem = eachmatch(Selector("#imgSupplierPhoto"), doc.root)
     !isempty(logo_elem) && (data["logo"] = get_attr(first(logo_elem), "src"))
     
-    # Extract APQP/PPAP
+    #= Extract APQP/PPAP =#
     apqp_elem = eachmatch(Selector("#lblApqpPpap"), doc.root)
     if !isempty(apqp_elem)
         apqp_text = extract_text(first(apqp_elem))
@@ -611,7 +581,7 @@ function parse_quality_audits!(data::Dict, doc)
     
     audit_text = extract_text(first(audit_panel))
     
-    # SW Index
+    #= SW Index =#
     sw_match = match(r"Software\s+Index(.+?)(?:EE Index|Polymer Index|$)"i, audit_text)
     if !isnothing(sw_match)
         sw_text = sw_match.captures[1]
@@ -628,7 +598,7 @@ function parse_quality_audits!(data::Dict, doc)
         end
     end
     
-    # EE Index
+    #= EE Index =#
     ee_match = match(r"EE\s+Index(.+?)(?:Polymer Index|$)"i, audit_text)
     if !isnothing(ee_match)
         ee_text = ee_match.captures[1]
@@ -640,7 +610,7 @@ function parse_quality_audits!(data::Dict, doc)
         !isnothing(m) && (metrics["eeDate"] = m.captures[1])
     end
     
-    # SMA
+    #= SMA =#
     sma_match = match(r"SMA\s*/\s*Criticality\s+1\s+Index(.+?)(?:Software Index|EE Index|$)"i, audit_text)
     if !isnothing(sma_match)
         sma_text = sma_match.captures[1]
@@ -746,7 +716,7 @@ function generate_dashboard(workspace::String, suppliers_data::Vector)
     
     for supplier in suppliers_data
         generate_supplier_page(supplier, html_dir, supplier_template)
-        # Save JSON
+        #= Save JSON =#
         json_file = joinpath(suppliers_dir, "supplier_$(supplier["id"]).json")
         open(json_file, "w") do f write(f, JSON3.write(supplier)) end
     end
@@ -840,7 +810,7 @@ function generate_notifications(suppliers_data::Vector, myemail::String)
         metrics = get(supplier, "metrics", Dict())
         qpm = get(supplier, "qpm", Dict())
         
-        # QPM alerts
+        #= QPM alerts =#
         qpm_actual = tryparse(Float64, replace(get(qpm, "actual", "N/A"), r"[^0-9.-]" => ""))
         qpm_last = tryparse(Float64, replace(get(qpm, "lastPeriod", "N/A"), r"[^0-9.-]" => ""))
         
@@ -855,10 +825,10 @@ function generate_notifications(suppliers_data::Vector, myemail::String)
             end
         end
         
-        # SW Index expiration
+        #= SW Index expiration =#
         get(metrics, "swStatus", "N/A") == "Expired" && push!(notifications, create_sw_index_alert(parma, name, get(metrics, "swDate", ""), myemail))
         
-        # Certification expiry
+        #= Certification expiry =#
         for cert in get(supplier, "certifications", [])
             check_certification_expiry!(notifications, parma, name, cert, myemail)
         end
@@ -915,7 +885,7 @@ function check_certification_expiry!(notifications, parma, name, cert, email)
 end
 
 #= ═══════════════════════════════════════════════════════════════════════════════════
-   EMAIL SENDING
+   EMAIL SENDING (using Sendmail.jl)
    ═══════════════════════════════════════════════════════════════════════════════════ =#
 
 function send_notifications(workspace::String, notifications::Vector)
@@ -927,33 +897,16 @@ function send_notifications(workspace::String, notifications::Vector)
     
     config_path = joinpath(workspace, "conf", "config.toml")
     
-    # Load SMTP config
-    smtp_server = "smtp.gmail.com"
-    smtp_port = 587
-    smtp_user = ""
-    smtp_pass = ""
-    
     if isfile(config_path)
         try
-            config = TOML.parsefile(config_path)
-            smtp_section = get(config, "smtp", Dict())
-            smtp_server = get(smtp_section, "server", smtp_server)
-            smtp_port = get(smtp_section, "port", smtp_port)
-            smtp_user = get(smtp_section, "username", "")
-            smtp_pass = get(smtp_section, "password", "")
-            println("✓ SMTP config loaded")
+            Sendmail.configure(config_path)
+            println("✓ SMTP configured")
         catch e
             println("⚠️  SMTP config error: $e")
             return 0
         end
     else
         println("❌ config.toml not found - cannot send emails")
-        println("   Create: $(config_path)")
-        return 0
-    end
-    
-    if isempty(smtp_user) || isempty(smtp_pass)
-        println("❌ SMTP credentials not configured in config.toml")
         return 0
     end
     
@@ -964,28 +917,7 @@ function send_notifications(workspace::String, notifications::Vector)
         println("   Subject: $(notif["subject"])")
         
         try
-            # Build email body with headers
-            body_with_headers = """From: QPrism <$(smtp_user)>
-To: $(notif["recipient"])
-Subject: $(notif["subject"])
-MIME-Version: 1.0
-Content-Type: text/html; charset=UTF-8
-
-$(notif["body"])"""
-            
-            # Create options for SMTPClient
-            opt = SendOptions(
-                isSSL = true,
-                username = smtp_user,
-                passwd = smtp_pass
-            )
-            
-            # Build URL
-            url = "smtps://$(smtp_server):465"
-            
-            # Send email
-            resp = send(url, [notif["recipient"]], smtp_user, IOBuffer(body_with_headers), opt)
-            
+            Sendmail.send(notif["recipient"], notif["subject"], notif["body"]; ishtml=true)
             println("   ✅ Sent")
             sent += 1
         catch e
@@ -1016,7 +948,7 @@ function open_dashboard(workspace::String)
     println("\n🌐 Opening dashboard: $file_url")
     
     if !launch_chromedriver()
-        # Fallback to default browser
+        #= Fallback to default browser =#
         if Sys.iswindows()
             run(`cmd /c start "" "$abs_path"`, wait=false)
         elseif Sys.isapple()
@@ -1153,11 +1085,8 @@ end
    MAIN ENTRY POINT
    ═══════════════════════════════════════════════════════════════════════════════════ =#
 
-"""
-    qprismrun()
-
-Main entry point for QPrism. Run this after `using Qprism`.
-"""
+#= qprismrun()
+   Main entry point for QPrism. Run this after `using Qprism`. =#
 function qprismrun()
     println()
     println("╔══════════════════════════════════════════════════════════════════════╗")
@@ -1201,4 +1130,4 @@ function qprismrun()
     end
 end
 
-end # module
+end #= module =#
