@@ -1,13 +1,13 @@
 #!/usr/bin/env julia
 #┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
-#┃ 📁File      📄 Qprism.jl                                                          ┃
-#┃ 📙Brief     📝 Volvo Supplier Quality Notification System                         ┃
-#┃ 🧾Details   🔎 Web scraping, dashboard generation, and email notifications        ┃
-#┃ 🚩OAuthor   🦋 Original Author: Jaewoo Joung/정재우/郑在祐                         ┃
-#┃ 👨‍🔧LAuthor   👤 Last Author: Jaewoo Joung                                         ┃
-#┃ 📆LastDate  📍 2025-11-29 🔄Please support to keep update🔄                       ┃
-#┃ 🏭License   📜 JSD:Just Simple Distribution(Jaewoo's Simple Distribution)         ┃
-#┃ ✅Guarantee ⚠️ Explicitly UN-guaranteed                                           ┃
+#┃ 📁File      📄 Qprism.jl                                                         ┃
+#┃ 📙Brief     📝 Volvo Supplier Quality Notification System                        ┃
+#┃ 🧾Details   🔎 Web scraping, dashboard generation, and email notifications       ┃
+#┃ 🚩OAuthor   🦋 Original Author: Jaewoo Joung/정재우/郑在祐                        ┃
+#┃ 👨‍🔧LAuthor   👤 Last Author: Jaewoo Joung                                        ┃
+#┃ 📆LastDate  📍 2025-11-29 🔄Please support to keep update🔄                      ┃
+#┃ 🏭License   📜 JSD:Just Simple Distribution(Jaewoo's Simple Distribution)          ┃
+#┃ ✅Guarantee ⚠️ Explicitly UN-guaranteed                                        ┃
 #┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
 module Qprism
@@ -35,16 +35,8 @@ const REQUEST_DELAY = 2
 const PAGE_LOAD_TIMEOUT = 60
 const DEFAULT_WEBDRIVER_PORT = 9515
 
-#= Remote config URLs =#
-const CONFIG_URLS = Dict(
-    "config.toml" => "https://jaewoojoung.github.io/volv/conf/config.toml",
-    "suppliers.toml" => "https://jaewoojoung.github.io/volv/conf/suppliers.toml",
-    "index.html" => "https://jaewoojoung.github.io/volv/temp/index.html",
-    "supplier.html" => "https://jaewoojoung.github.io/volv/temp/supplier.html"
-)
-
 #= ═══════════════════════════════════════════════════════════════════════════════════
-   INITIALIZATION - Download config files if missing
+   INITIALIZATION - Create workspace directories
    ═══════════════════════════════════════════════════════════════════════════════════ =#
 
 #= get_workspace_dir()
@@ -61,7 +53,11 @@ function get_workspace_dir()
 end
 
 #= init_workspace()
-   Initialize workspace by creating directories and downloading config files if missing. =#
+   Initialize workspace by creating directories.
+   Assumes config files ("config.toml", "suppliers.toml")
+   and template files ("index.html", "supplier.html")
+   are manually placed in "conf/" and "temp/" respectively.
+=#
 function init_workspace()
     workspace = get_workspace_dir()
     
@@ -74,218 +70,10 @@ function init_workspace()
         end
     end
     
-    #= Download config files if missing =#
-    files_to_download = [
-        ("conf/config.toml", CONFIG_URLS["config.toml"]),
-        ("conf/suppliers.toml", CONFIG_URLS["suppliers.toml"]),
-        ("temp/index.html", CONFIG_URLS["index.html"]),
-        ("temp/supplier.html", CONFIG_URLS["supplier.html"])
-    ]
-    
-    for (local_path, url) in files_to_download
-        full_path = joinpath(workspace, local_path)
-        if !isfile(full_path)
-            println("⬇️  Downloading: $local_path")
-            try
-                response = HTTP.get(url; status_exception=false)
-                if response.status == 200
-                    open(full_path, "w") do f
-                        write(f, String(response.body))
-                    end
-                    println("   ✓ Downloaded: $local_path")
-                else
-                    println("   ⚠️  HTTP $(response.status) - creating default")
-                    create_default_file(full_path, local_path)
-                end
-            catch e
-                println("   ⚠️  Failed to download: $e")
-                create_default_file(full_path, local_path)
-            end
-        end
-    end
-    
     println("\n📂 Workspace: $workspace")
+    println("💡 Please ensure your config files are in '.qprism/conf/'")
+    println("💡 Please ensure your templates are in '.qprism/temp/'")
     return workspace
-end
-
-#= create_default_file(path, filename)
-   Create default config file if download fails. =#
-function create_default_file(path, filename)
-    if occursin("suppliers.toml", filename)
-        content = """
-# ═══════════════════════════════════════════════════════════════════════════════════
-# QPrism Supplier Configuration
-# ═══════════════════════════════════════════════════════════════════════════════════
-
-[[suppliers]]
-# Add your PARMA codes here (comma-separated integers)
-# parma_codes = [32731, 33568]
-parma_codes = []
-
-[myemail]
-# Add your email address for notifications
-# myemail = "jaewoo.joung@consultant.volvo.com"
-myemail = ""
-"""
-        open(path, "w") do f
-            write(f, content)
-        end
-        println("   📝 Created default: $filename")
-    elseif occursin("config.toml", filename)
-        content = """
-# ═══════════════════════════════════════════════════════════════════════════════════
-# QPrism SMTP Configuration
-# ═══════════════════════════════════════════════════════════════════════════════════
-
-[smtp]
-server = "smtp.gmail.com"
-port = 587
-username = ""
-password = ""
-"""
-        open(path, "w") do f
-            write(f, content)
-        end
-        println("   📝 Created default: $filename")
-    elseif occursin("index.html", filename)
-        open(path, "w") do f
-            write(f, get_default_index_template())
-        end
-        println("   📝 Created default: $filename")
-    elseif occursin("supplier.html", filename)
-        open(path, "w") do f
-            write(f, get_default_supplier_template())
-        end
-        println("   📝 Created default: $filename")
-    end
-end
-
-#= ═══════════════════════════════════════════════════════════════════════════════════
-   DEFAULT TEMPLATES (embedded)
-   ═══════════════════════════════════════════════════════════════════════════════════ =#
-
-function get_default_index_template()
-    return """
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>QPrism - Supplier Quality Dashboard</title>
-    <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        body { font-family: 'Segoe UI', Tahoma, sans-serif; background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%); min-height: 100vh; color: #fff; }
-        .header { background: rgba(255,255,255,0.1); backdrop-filter: blur(10px); padding: 20px 40px; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid rgba(255,255,255,0.1); }
-        .logo { font-size: 28px; font-weight: 700; color: #00d4ff; }
-        .logo span { color: #fff; }
-        .stats { display: flex; gap: 30px; }
-        .stat { text-align: center; }
-        .stat-value { font-size: 24px; font-weight: 700; color: #00d4ff; }
-        .stat-label { font-size: 12px; color: rgba(255,255,255,0.6); text-transform: uppercase; }
-        .container { max-width: 1400px; margin: 0 auto; padding: 40px; }
-        .title { font-size: 32px; margin-bottom: 30px; }
-        .suppliers-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 20px; }
-        .supplier-card { background: rgba(255,255,255,0.05); border-radius: 16px; padding: 24px; border: 1px solid rgba(255,255,255,0.1); cursor: pointer; transition: all 0.3s ease; }
-        .supplier-card:hover { background: rgba(255,255,255,0.1); transform: translateY(-4px); box-shadow: 0 20px 40px rgba(0,0,0,0.3); }
-        .supplier-card h3 { font-size: 18px; margin-bottom: 8px; }
-        .supplier-card .parma { font-size: 14px; color: rgba(255,255,255,0.6); margin-bottom: 16px; }
-        .metrics-row { display: flex; gap: 12px; flex-wrap: wrap; }
-        .metrics-row span { padding: 6px 12px; border-radius: 20px; font-size: 12px; font-weight: 600; }
-        .status-approved { background: rgba(46,204,113,0.2); color: #2ecc71; }
-        .status-expired { background: rgba(231,76,60,0.2); color: #e74c3c; }
-        .status-na { background: rgba(149,165,166,0.2); color: #95a5a6; }
-        .trend-up { background: rgba(231,76,60,0.2); color: #e74c3c; }
-        .trend-down { background: rgba(46,204,113,0.2); color: #2ecc71; }
-        .trend-neutral { background: rgba(241,196,15,0.2); color: #f1c40f; }
-        .footer { text-align: center; padding: 40px; color: rgba(255,255,255,0.4); font-size: 14px; }
-    </style>
-</head>
-<body>
-    <div class="header">
-        <div class="logo">Q<span>Prism</span></div>
-        <div class="stats"><div class="stat"><div class="stat-value">{{TOTAL_SUPPLIERS}}</div><div class="stat-label">Suppliers</div></div></div>
-    </div>
-    <div class="container">
-        <h1 class="title">Supplier Quality Dashboard</h1>
-        <div class="suppliers-grid">{{SUPPLIER_CARDS}}</div>
-    </div>
-    <div class="footer">Generated: {{GENERATED_DATE}} | QPrism - Volvo Supplier Quality System</div>
-</body>
-</html>
-"""
-end
-
-function get_default_supplier_template()
-    return """
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{{SUPPLIER_NAME}} - QPrism</title>
-    <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        body { font-family: 'Segoe UI', Tahoma, sans-serif; background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%); min-height: 100vh; color: #fff; }
-        .header { background: rgba(255,255,255,0.1); backdrop-filter: blur(10px); padding: 20px 40px; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid rgba(255,255,255,0.1); }
-        .logo { font-size: 28px; font-weight: 700; color: #00d4ff; }
-        .logo span { color: #fff; }
-        .back-link { color: #00d4ff; text-decoration: none; }
-        .back-link:hover { text-decoration: underline; }
-        .container { max-width: 1200px; margin: 0 auto; padding: 40px; }
-        .supplier-header { display: flex; align-items: center; gap: 24px; margin-bottom: 40px; }
-        .supplier-logo { width: 80px; height: 80px; border-radius: 12px; background: rgba(255,255,255,0.1); object-fit: contain; }
-        .supplier-info h1 { font-size: 32px; margin-bottom: 8px; }
-        .supplier-info .parma { font-size: 16px; color: rgba(255,255,255,0.6); }
-        .cards-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 24px; margin-bottom: 40px; }
-        .card { background: rgba(255,255,255,0.05); border-radius: 16px; padding: 24px; border: 1px solid rgba(255,255,255,0.1); }
-        .card h2 { font-size: 18px; margin-bottom: 20px; color: #00d4ff; }
-        .metric-row { display: flex; justify-content: space-between; align-items: center; padding: 12px 0; border-bottom: 1px solid rgba(255,255,255,0.1); }
-        .metric-row:last-child { border-bottom: none; }
-        .metric-label { color: rgba(255,255,255,0.6); }
-        .metric-value { font-weight: 600; }
-        .status-approved { color: #2ecc71; }
-        .status-expired { color: #e74c3c; }
-        .status-na { color: #95a5a6; }
-        .trend-up { color: #e74c3c; }
-        .trend-down { color: #2ecc71; }
-        .trend-neutral { color: #f1c40f; }
-        table { width: 100%; border-collapse: collapse; }
-        table th, table td { padding: 12px; text-align: left; border-bottom: 1px solid rgba(255,255,255,0.1); }
-        table th { color: rgba(255,255,255,0.6); font-weight: 500; }
-        .full-width { grid-column: 1 / -1; }
-        .footer { text-align: center; padding: 40px; color: rgba(255,255,255,0.4); font-size: 14px; }
-        .vsib-link { display: inline-block; margin-top: 10px; padding: 10px 20px; background: #00d4ff; color: #1a1a2e; text-decoration: none; border-radius: 8px; font-weight: 600; }
-        .vsib-link:hover { background: #00b8e6; }
-    </style>
-</head>
-<body>
-    <div class="header">
-        <div class="logo">Q<span>Prism</span></div>
-        <a href="index.html" class="back-link">← Back to Dashboard</a>
-    </div>
-    <div class="container">
-        <div class="supplier-header">
-            <img src="{{SUPPLIER_LOGO}}" alt="" class="supplier-logo" onerror="this.style.display='none'">
-            <div class="supplier-info">
-                <h1>{{SUPPLIER_NAME}}</h1>
-                <p class="parma">PARMA: {{PARMA_ID}}</p>
-                <a href="https://vsib.srv.volvo.com/vsib/Content/sus/SupplierScorecard.aspx?SupplierId={{PARMA_ID}}" target="_blank" class="vsib-link">View in VSIB →</a>
-            </div>
-        </div>
-        <div class="cards-grid">
-            <div class="card"><h2>Project Status</h2><div class="metric-row"><span class="metric-label">APQP</span><span class="metric-value">{{APQP}}</span></div><div class="metric-row"><span class="metric-label">PPAP</span><span class="metric-value">{{PPAP}}</span></div></div>
-            <div class="card"><h2>Software Index</h2><div class="metric-row"><span class="metric-label">Index</span><span class="metric-value">{{SW_INDEX}}</span></div><div class="metric-row"><span class="metric-label">Status</span><span class="metric-value {{SW_CLASS}}">{{SW_STATUS}}</span></div><div class="metric-row"><span class="metric-label">Audit Date</span><span class="metric-value">{{SW_DATE}}</span></div></div>
-            <div class="card"><h2>EE Index</h2><div class="metric-row"><span class="metric-label">Index</span><span class="metric-value">{{EE_INDEX}}</span></div><div class="metric-row"><span class="metric-label">Status</span><span class="metric-value {{EE_CLASS}}">{{EE_STATUS}}</span></div><div class="metric-row"><span class="metric-label">Audit Date</span><span class="metric-value">{{EE_DATE}}</span></div></div>
-            <div class="card"><h2>SMA / Criticality 1</h2><div class="metric-row"><span class="metric-label">Index</span><span class="metric-value">{{SMA}}</span></div><div class="metric-row"><span class="metric-label">Status</span><span class="metric-value">{{SMA_STATUS}}</span></div><div class="metric-row"><span class="metric-label">Audit Date</span><span class="metric-value">{{SMA_DATE}}</span></div></div>
-            <div class="card"><h2>QPM Performance</h2><div class="metric-row"><span class="metric-label">Last Period</span><span class="metric-value">{{QPM_LAST}}</span></div><div class="metric-row"><span class="metric-label">Actual</span><span class="metric-value {{QPM_CLASS}}">{{QPM_ACTUAL}}</span></div><div class="metric-row"><span class="metric-label">Change</span><span class="metric-value {{QPM_CLASS}}">{{QPM_CHANGE}}</span></div></div>
-            <div class="card"><h2>PPM Performance</h2><div class="metric-row"><span class="metric-label">Last Period</span><span class="metric-value">{{PPM_LAST}}</span></div><div class="metric-row"><span class="metric-label">Actual</span><span class="metric-value {{PPM_CLASS}}">{{PPM_ACTUAL}}</span></div><div class="metric-row"><span class="metric-label">Change</span><span class="metric-value {{PPM_CLASS}}">{{PPM_CHANGE}}</span></div></div>
-            <div class="card full-width"><h2>Certifications</h2><table><thead><tr><th>Certification</th><th>Certified Place</th><th>Expiry Date</th><th>Status</th></tr></thead><tbody>{{CERTIFICATIONS_HTML}}</tbody></table></div>
-        </div>
-    </div>
-    <div class="footer">Generated: {{GENERATED_DATE}} | QPrism - Volvo Supplier Quality System</div>
-</body>
-</html>
-"""
 end
 
 #= ═══════════════════════════════════════════════════════════════════════════════════
@@ -299,6 +87,7 @@ function load_suppliers_config(workspace::String)
     
     if !isfile(config_path)
         println("❌ suppliers.toml not found at: $config_path")
+        println("   Please create this file manually.")
         return nothing, nothing
     end
     
@@ -716,9 +505,9 @@ function generate_dashboard(workspace::String, suppliers_data::Vector)
     supplier_template = joinpath(template_dir, "supplier.html")
     
     if !isfile(index_template) || !isfile(supplier_template)
-        println("❌ Templates not found - creating defaults")
-        open(index_template, "w") do f write(f, get_default_index_template()) end
-        open(supplier_template, "w") do f write(f, get_default_supplier_template()) end
+        println("❌ Templates not found in $template_dir")
+        println("   Please add 'index.html' and 'supplier.html' to that folder.")
+        return
     end
     
     generate_index_page(suppliers_data, html_dir, index_template)
@@ -726,13 +515,13 @@ function generate_dashboard(workspace::String, suppliers_data::Vector)
     for supplier in suppliers_data
         generate_supplier_page(supplier, html_dir, supplier_template)
         #= Save JSON =#
-        json_file = joinpath(suppliers_dir, "supplier_$(supplier["id"]).json")
-        open(json_file, "w") do f write(f, JSON3.write(supplier)) end
+        json_file = joinpath(suppliers_dir, "supplier_$(supplier["parmaId"]).json")
+        open(json_file, "w") do f
+            JSON3.pretty(f, supplier)
+        end
     end
     
-    index_path = joinpath(html_dir, "index.html")
-    println("\n✅ Dashboard generated: $index_path")
-    return index_path
+    println("\n✅ Dashboard generated at: $html_dir")
 end
 
 function generate_index_page(suppliers::Vector, output_dir::String, template_file::String)
