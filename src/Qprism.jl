@@ -1,13 +1,13 @@
 #!/usr/bin/env julia
 #┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
-#┃ 📁File      📄 Qprism.jl                                                         ┃
-#┃ 📙Brief     📝 Volvo Supplier Quality Notification System                        ┃
-#┃ 🧾Details   🔎 Web scraping, dashboard generation, and email notifications       ┃
-#┃ 🚩OAuthor   🦋 Original Author: Jaewoo Joung/정재우/郑在祐                        ┃
-#┃ 👨‍🔧LAuthor   👤 Last Author: Jaewoo Joung                                        ┃
-#┃ 📆LastDate  📍 2025-11-29 🔄Please support to keep update🔄                      ┃
-#┃ 🏭License   📜 JSD:Just Simple Distribution(Jaewoo's Simple Distribution)          ┃
-#┃ ✅Guarantee ⚠️ Explicitly UN-guaranteed                                        ┃
+#┃ 📁File      📄 Qprism.jl                                                          ┃
+#┃ 📙Brief     📝 Volvo Supplier Quality Notification System                         ┃
+#┃ 🧾Details   🔎 Web scraping, dashboard generation, and email notifications        ┃
+#┃ 🚩OAuthor   🦋 Original Author: Jaewoo Joung/정재우/郑在祐                         ┃
+#┃ 👨‍🔧LAuthor   👤 Last Author: Jaewoo Joung                                         ┃
+#┃ 📆LastDate  📍 2025-11-29 🔄Please support to keep update🔄                       ┃
+#┃ 🏭License   📜 JSD:Just Simple Distribution(Jaewoo's Simple Distribution)         ┃
+#┃ ✅Guarantee ⚠️ Explicitly UN-guaranteed                                           ┃
 #┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
 module Qprism
@@ -54,10 +54,7 @@ end
 
 #= init_workspace()
    Initialize workspace by creating directories.
-   Assumes config files ("config.toml", "suppliers.toml")
-   and template files ("index.html", "supplier.html")
-   are manually placed in "conf/" and "temp/" respectively.
-=#
+   Config and template files should already exist in conf/ and temp/. =#
 function init_workspace()
     workspace = get_workspace_dir()
     
@@ -70,9 +67,27 @@ function init_workspace()
         end
     end
     
+    #= Check for required files =#
+    required_files = [
+        ("conf/config.toml", "SMTP configuration"),
+        ("conf/suppliers.toml", "Supplier PARMA codes"),
+        ("temp/index.html", "Dashboard template"),
+        ("temp/supplier.html", "Supplier page template")
+    ]
+    
+    missing_files = false
+    for (file, desc) in required_files
+        if !isfile(joinpath(workspace, file))
+            println("⚠️  Missing: $file ($desc)")
+            missing_files = true
+        end
+    end
+    
+    if missing_files
+        println("\n💡 Run install.bat to download required files")
+    end
+    
     println("\n📂 Workspace: $workspace")
-    println("💡 Please ensure your config files are in '.qprism/conf/'")
-    println("💡 Please ensure your templates are in '.qprism/temp/'")
     return workspace
 end
 
@@ -87,7 +102,6 @@ function load_suppliers_config(workspace::String)
     
     if !isfile(config_path)
         println("❌ suppliers.toml not found at: $config_path")
-        println("   Please create this file manually.")
         return nothing, nothing
     end
     
@@ -335,7 +349,9 @@ function parse_supplier_html(html_path::String)
         "metrics" => Dict{String, Any}(),
         "qpm" => Dict("lastPeriod" => "N/A", "actual" => "N/A", "change" => "N/A", "trend" => "neutral"),
         "ppm" => Dict("lastPeriod" => "N/A", "actual" => "N/A", "change" => "N/A", "trend" => "neutral"),
-        "audits" => [], "certifications" => []
+        "audits" => [], "certifications" => [],
+        "sqe" => [], "lowPerforming" => "N/A", "warrantyIssues" => "N/A",
+        "capacityDocs" => "N/A", "capacityRisk" => "N/A"
     )
     
     #= Extract supplier info =#
@@ -350,9 +366,8 @@ function parse_supplier_html(html_path::String)
         end
     end
     
-    #= Extract logo =#
-    logo_elem = eachmatch(Selector("#imgSupplierPhoto"), doc.root)
-    !isempty(logo_elem) && (data["logo"] = get_attr(first(logo_elem), "src"))
+    #= Extract logo - get first letter of company name =#
+    data["logo"] = isempty(data["name"]) || data["name"] == "Unknown" ? "?" : uppercase(string(first(data["name"])))
     
     #= Extract APQP/PPAP =#
     apqp_elem = eachmatch(Selector("#lblApqpPpap"), doc.root)
@@ -418,6 +433,17 @@ function parse_quality_audits!(data::Dict, doc)
         m = match(r"(\d{4}-\d{2}-\d{2})", sma_text)
         !isnothing(m) && (metrics["smaDate"] = m.captures[1])
     end
+    
+    #= Polymer Index =#
+    poly_match = match(r"Polymer\s+Index(.+?)(?:Software Index|EE Index|SMA|$)"i, audit_text)
+    if !isnothing(poly_match)
+        poly_text = poly_match.captures[1]
+        m = match(r"(\d+)%", poly_text)
+        !isnothing(m) && (metrics["polymerIndex"] = m.captures[1] * "%")
+        occursin("Approved", poly_text) && (metrics["polymerStatus"] = "Approved")
+        m = match(r"(\d{4}-\d{2}-\d{2})", poly_text)
+        !isnothing(m) && (metrics["polymerDate"] = m.captures[1])
+    end
 end
 
 function parse_performance_metrics!(data::Dict, doc)
@@ -482,10 +508,13 @@ end
 
 load_template(path::String) = isfile(path) ? read(path, String) : error("Template not found: $path")
 
+#= substitute_template(template, vars)
+   Replace $VARIABLE with values from vars dict. =#
 function substitute_template(template::String, vars::Dict)::String
     result = template
     for (k, v) in vars
-        result = replace(result, "{{$k}}" => string(v))
+        #= Replace $KEY with value =#
+        result = replace(result, "\$$k" => string(v))
     end
     return result
 end
@@ -504,10 +533,14 @@ function generate_dashboard(workspace::String, suppliers_data::Vector)
     index_template = joinpath(template_dir, "index.html")
     supplier_template = joinpath(template_dir, "supplier.html")
     
-    if !isfile(index_template) || !isfile(supplier_template)
-        println("❌ Templates not found in $template_dir")
-        println("   Please add 'index.html' and 'supplier.html' to that folder.")
-        return
+    if !isfile(index_template)
+        println("❌ Template not found: $index_template")
+        return nothing
+    end
+    
+    if !isfile(supplier_template)
+        println("❌ Template not found: $supplier_template")
+        return nothing
     end
     
     generate_index_page(suppliers_data, html_dir, index_template)
@@ -517,35 +550,100 @@ function generate_dashboard(workspace::String, suppliers_data::Vector)
         #= Save JSON =#
         json_file = joinpath(suppliers_dir, "supplier_$(supplier["parmaId"]).json")
         open(json_file, "w") do f
-            JSON3.pretty(f, supplier)
+            write(f, JSON3.write(supplier))
         end
     end
     
-    println("\n✅ Dashboard generated at: $html_dir")
+    index_path = joinpath(html_dir, "index.html")
+    println("\n✅ Dashboard generated: $index_path")
+    return index_path
 end
 
 function generate_index_page(suppliers::Vector, output_dir::String, template_file::String)
     template = load_template(template_file)
     
+    #= Calculate KPIs =#
+    ppm_over_50 = 0
+    qpm_over_50 = 0
+    qpm_trend_up = 0
+    qpm_trend_down = 0
+    
+    for s in suppliers
+        ppm = get(s, "ppm", Dict())
+        qpm = get(s, "qpm", Dict())
+        
+        ppm_val = tryparse(Float64, replace(get(ppm, "actual", "0"), r"[^0-9.-]" => ""))
+        qpm_val = tryparse(Float64, replace(get(qpm, "actual", "0"), r"[^0-9.-]" => ""))
+        
+        !isnothing(ppm_val) && ppm_val > 50 && (ppm_over_50 += 1)
+        !isnothing(qpm_val) && qpm_val > 50 && (qpm_over_50 += 1)
+        
+        trend = get(qpm, "trend", "neutral")
+        trend == "up" && (qpm_trend_up += 1)
+        trend == "down" && (qpm_trend_down += 1)
+    end
+    
+    #= Determine overall trend =#
+    qpm_trend_class = qpm_trend_up > qpm_trend_down ? "up" : qpm_trend_down > qpm_trend_up ? "down" : "neutral"
+    qpm_trend_icon = qpm_trend_up > qpm_trend_down ? "↑" : qpm_trend_down > qpm_trend_up ? "↓" : "→"
+    qpm_trend_text = "$(qpm_trend_up) up, $(qpm_trend_down) down"
+    
+    #= Generate supplier cards =#
     cards_html = ""
     for s in suppliers
         parma = get(s, "parmaId", "N/A")
         name = get(s, "name", "Unknown")
+        logo = get(s, "logo", "?")
         metrics = get(s, "metrics", Dict())
         qpm = get(s, "qpm", Dict())
+        ppm = get(s, "ppm", Dict())
         
         sw_status = get(metrics, "swStatus", "N/A")
-        sw_class = sw_status == "Approved" ? "status-approved" : sw_status == "Expired" ? "status-expired" : "status-na"
+        sw_badge = sw_status == "Approved" ? "badge-success" : sw_status == "Expired" ? "badge-danger" : "badge-secondary"
+        
         qpm_actual = get(qpm, "actual", "N/A")
         qpm_trend = get(qpm, "trend", "neutral")
-        qpm_class = qpm_trend == "down" ? "trend-down" : qpm_trend == "up" ? "trend-up" : "trend-neutral"
+        qpm_class = qpm_trend == "down" ? "metric-good" : qpm_trend == "up" ? "metric-bad" : "metric-neutral"
         
-        cards_html *= """<div class="supplier-card" onclick="window.location='supplier_$parma.html'"><h3>$name</h3><p class="parma">PARMA: $parma</p><div class="metrics-row"><span class="$sw_class">SW: $sw_status</span><span class="$qpm_class">QPM: $qpm_actual</span></div></div>"""
+        ppm_actual = get(ppm, "actual", "N/A")
+        ppm_trend = get(ppm, "trend", "neutral")
+        ppm_class = ppm_trend == "down" ? "metric-good" : ppm_trend == "up" ? "metric-bad" : "metric-neutral"
+        
+        cards_html *= """
+        <div class="supplier-card" onclick="window.location='supplier_$parma.html'">
+            <div class="supplier-header">
+                <div class="supplier-logo">$logo</div>
+                <div class="supplier-info">
+                    <h3><a href="supplier_$parma.html">$name</a></h3>
+                    <span class="supplier-id">PARMA: $parma</span>
+                </div>
+            </div>
+            <div class="supplier-metrics">
+                <div class="metric $qpm_class">
+                    <div class="metric-label">QPM</div>
+                    <div class="metric-value">$qpm_actual</div>
+                </div>
+                <div class="metric $ppm_class">
+                    <div class="metric-label">PPM</div>
+                    <div class="metric-value">$ppm_actual</div>
+                </div>
+            </div>
+            <div class="supplier-status">
+                <span class="badge $sw_badge">SW: $sw_status</span>
+            </div>
+        </div>
+        """
     end
     
     html = substitute_template(template, Dict(
         "SUPPLIER_CARDS" => cards_html,
         "TOTAL_SUPPLIERS" => length(suppliers),
+        "PPM_OVER_50" => ppm_over_50,
+        "PPM_COLOR_CLASS" => ppm_over_50 > 0 ? "red" : "black",
+        "QPM_OVER_50" => qpm_over_50,
+        "QPM_TREND_CLASS" => qpm_trend_class,
+        "QPM_TREND_ICON" => qpm_trend_icon,
+        "QPM_TREND_TEXT" => qpm_trend_text,
         "GENERATED_DATE" => Dates.format(now(), "yyyy-mm-dd HH:MM:SS")
     ))
     
@@ -568,26 +666,85 @@ function generate_supplier_page(supplier::Dict, output_dir::String, template_fil
     qpm_class = get(qpm, "trend", "neutral") == "down" ? "trend-down" : get(qpm, "trend", "neutral") == "up" ? "trend-up" : "trend-neutral"
     ppm_class = get(ppm, "trend", "neutral") == "down" ? "trend-down" : get(ppm, "trend", "neutral") == "up" ? "trend-up" : "trend-neutral"
     
-    certs_html = join(["<tr><td>$(get(c,"name","N/A"))</td><td>$(get(c,"certifiedPlace","N/A"))</td><td>$(get(c,"expiryDate","N/A"))</td><td>$(get(c,"status","N/A"))</td></tr>" for c in get(supplier, "certifications", [])])
+    #= Generate certifications HTML =#
+    certs = get(supplier, "certifications", [])
+    certs_html = ""
+    for c in certs
+        cert_status = get(c, "status", "N/A")
+        status_class = occursin("Valid", cert_status) ? "status-approved" : occursin("Expir", cert_status) ? "status-expired" : "status-na"
+        certs_html *= """
+        <div class="cert-item">
+            <div class="cert-name">$(get(c, "name", "N/A"))</div>
+            <div class="cert-details">
+                <span>$(get(c, "certifiedPlace", "N/A"))</span>
+                <span class="$status_class">$(get(c, "expiryDate", "N/A"))</span>
+            </div>
+        </div>
+        """
+    end
+    if isempty(certs_html)
+        certs_html = "<p>No certifications found</p>"
+    end
+    
+    #= Generate audits HTML =#
+    audits_html = ""
+    audit_types = [("SW Index", "swIndex", "swStatus", "swDate"),
+                   ("EE Index", "eeIndex", "eeStatus", "eeDate"),
+                   ("SMA", "sma", "smaStatus", "smaDate")]
+    for (title, idx_key, status_key, date_key) in audit_types
+        idx_val = get(metrics, idx_key, "N/A")
+        status_val = get(metrics, status_key, "N/A")
+        date_val = get(metrics, date_key, "N/A")
+        audits_html *= """
+        <div class="audit-box">
+            <div class="audit-title">$title</div>
+            <div class="audit-value">$idx_val</div>
+            <div class="audit-status">$status_val</div>
+            <div class="audit-date">$date_val</div>
+        </div>
+        """
+    end
+    
+    #= Generate SQE HTML =#
+    sqe_list = get(supplier, "sqe", [])
+    sqe_html = isempty(sqe_list) ? "<div class=\"sqe-info\">No SQE assigned</div>" : join(["<div class=\"sqe-info\">$s</div>" for s in sqe_list])
     
     html = substitute_template(template, Dict(
         "SUPPLIER_NAME" => get(supplier, "name", "Unknown"),
         "SUPPLIER_ID" => get(supplier, "id", "N/A"),
+        "SUPPLIER_LOGO" => get(supplier, "logo", "?"),
         "PARMA_ID" => parma,
-        "SUPPLIER_LOGO" => get(supplier, "logo", ""),
         "APQP" => get(supplier, "apqp", "N/A"),
         "PPAP" => get(supplier, "ppap", "N/A"),
         "SW_INDEX" => get(metrics, "swIndex", "N/A"),
-        "SW_STATUS" => sw_status, "SW_DATE" => get(metrics, "swDate", "N/A"), "SW_CLASS" => sw_class,
+        "SW_STATUS" => sw_status,
+        "SW_DATE" => get(metrics, "swDate", "N/A"),
+        "SW_CLASS" => sw_class,
         "EE_INDEX" => get(metrics, "eeIndex", "N/A"),
-        "EE_STATUS" => ee_status, "EE_DATE" => get(metrics, "eeDate", "N/A"), "EE_CLASS" => ee_class,
+        "EE_STATUS" => ee_status,
+        "EE_DATE" => get(metrics, "eeDate", "N/A"),
+        "EE_CLASS" => ee_class,
         "SMA" => get(metrics, "sma", "N/A"),
-        "SMA_STATUS" => get(metrics, "smaStatus", "N/A"), "SMA_DATE" => get(metrics, "smaDate", "N/A"),
+        "SMA_STATUS" => get(metrics, "smaStatus", "N/A"),
+        "SMA_DATE" => get(metrics, "smaDate", "N/A"),
+        "POLYMER_INDEX" => get(metrics, "polymerIndex", "N/A"),
+        "POLYMER_STATUS" => get(metrics, "polymerStatus", "N/A"),
+        "POLYMER_DATE" => get(metrics, "polymerDate", "N/A"),
         "QPM_LAST" => get(qpm, "lastPeriod", "N/A"),
-        "QPM_ACTUAL" => get(qpm, "actual", "N/A"), "QPM_CHANGE" => get(qpm, "change", "N/A"), "QPM_CLASS" => qpm_class,
+        "QPM_ACTUAL" => get(qpm, "actual", "N/A"),
+        "QPM_CHANGE" => get(qpm, "change", "N/A"),
+        "QPM_CLASS" => qpm_class,
         "PPM_LAST" => get(ppm, "lastPeriod", "N/A"),
-        "PPM_ACTUAL" => get(ppm, "actual", "N/A"), "PPM_CHANGE" => get(ppm, "change", "N/A"), "PPM_CLASS" => ppm_class,
+        "PPM_ACTUAL" => get(ppm, "actual", "N/A"),
+        "PPM_CHANGE" => get(ppm, "change", "N/A"),
+        "PPM_CLASS" => ppm_class,
+        "SQE_HTML" => sqe_html,
+        "AUDITS_HTML" => audits_html,
         "CERTIFICATIONS_HTML" => certs_html,
+        "LOW_PERFORMING" => get(supplier, "lowPerforming", "N/A"),
+        "WARRANTY_ISSUES" => get(supplier, "warrantyIssues", "N/A"),
+        "CAPACITY_DOCS" => get(supplier, "capacityDocs", "N/A"),
+        "CAPACITY_RISK" => get(supplier, "capacityRisk", "N/A"),
         "GENERATED_DATE" => Dates.format(now(), "yyyy-mm-dd HH:MM:SS")
     ))
     
@@ -741,39 +898,19 @@ function open_dashboard(workspace::String)
     end
     
     abs_path = abspath(dashboard_path)
-    file_url = Sys.iswindows() ? "file:///" * replace(abs_path, "\\" => "/") : "file://" * abs_path
     
-    println("\n🌐 Opening dashboard: $file_url")
+    println("\n🌐 Opening dashboard...")
     
-    if !launch_chromedriver()
-        #= Fallback to default browser =#
-        if Sys.iswindows()
-            run(`cmd /c start "" "$abs_path"`, wait=false)
-        elseif Sys.isapple()
-            run(`open "$abs_path"`, wait=false)
-        else
-            run(`xdg-open "$abs_path"`, wait=false)
-        end
-        return
+    #= Open in default browser =#
+    if Sys.iswindows()
+        run(`cmd /c start "" "$abs_path"`, wait=false)
+    elseif Sys.isapple()
+        run(`open "$abs_path"`, wait=false)
+    else
+        run(`xdg-open "$abs_path"`, wait=false)
     end
     
-    local session = nothing
-    try
-        capabilities = Capabilities("chrome")
-        wd = RemoteWebDriver(capabilities, host="localhost", port=DEFAULT_WEBDRIVER_PORT)
-        session = Session(wd)
-        navigate!(session, file_url)
-        
-        println("\n✅ Dashboard opened!")
-        println("   Press Enter to close...")
-        readline()
-    catch e
-        println("⚠️  Error: $e")
-        Sys.iswindows() && run(`cmd /c start "" "$abs_path"`, wait=false)
-    finally
-        !isnothing(session) && try delete!(session) catch end
-        terminate_chromedriver()
-    end
+    println("✅ Dashboard opened in browser")
 end
 
 #= ═══════════════════════════════════════════════════════════════════════════════════
