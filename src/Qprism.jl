@@ -313,9 +313,18 @@ function load_suppliers_config(workspace::String)
         end
         parma_codes = unique(parma_codes)
         
-        #= Extract email =#
-        myemail_section = get(data, "myemail", Dict())
-        myemail = get(myemail_section, "myemail", "")
+        #= Extract email - handle both [[myemail]] (array) and [myemail] (table) formats =#
+        myemail = ""
+        myemail_data = get(data, "myemail", nothing)
+        if !isnothing(myemail_data)
+            if isa(myemail_data, Vector)
+                #= [[myemail]] format - array of tables =#
+                !isempty(myemail_data) && (myemail = get(first(myemail_data), "myemail", ""))
+            else
+                #= [myemail] format - single table =#
+                myemail = get(myemail_data, "myemail", "")
+            end
+        end
         
         if isempty(parma_codes)
             println("⚠️  No PARMA codes found in suppliers.toml")
