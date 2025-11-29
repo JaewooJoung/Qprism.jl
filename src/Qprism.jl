@@ -227,17 +227,38 @@ function create_chrome_session(; port::Int = DEFAULT_WEBDRIVER_PORT, headless::B
             "excludeSwitches" => ["enable-logging", "enable-automation"]
         )
         
-        caps = Capabilities("chrome")
-        caps.data["goog:chromeOptions"] = chrome_options
+        #= Create capabilities with Chrome options using alwaysMatch =#
+        capabilities = Dict(
+            "capabilities" => Dict(
+                "alwaysMatch" => Dict(
+                    "browserName" => "chrome",
+                    "goog:chromeOptions" => chrome_options
+                )
+            )
+        )
         
-        wd = RemoteWebDriver(caps, host="localhost", port=port)
-        session = Session(wd)
+        #= Connect to ChromeDriver directly =#
+        wd = RemoteWebDriver(Capabilities("chrome"), host="localhost", port=port)
         
-        println("✅ Chrome session created")
+        #= Create session with custom capabilities =#
+        session = Session(wd, capabilities)
+        
+        mode_str = headless ? "headless mode" : "normal mode"
+        println("✅ Chrome session created ($mode_str)")
         return session
     catch e
-        println("❌ Failed to create session: $e")
-        return nothing
+        #= If custom capabilities fail, try with basic capabilities =#
+        try
+            println("⚠️  Trying basic Chrome session...")
+            capabilities = Capabilities("chrome")
+            wd = RemoteWebDriver(capabilities, host="localhost", port=port)
+            session = Session(wd)
+            println("✅ Chrome session created (basic mode)")
+            return session
+        catch e2
+            println("❌ Failed to create session: $e2")
+            return nothing
+        end
     end
 end
 
@@ -253,23 +274,93 @@ function scrape_supplier(session, parma_code::Int)
     
     try
         navigate!(session, url)
-        sleep(3)
         
-        html = script!(session, "return document.documentElement.outerHTML;")
+        #= Wait for page to load =#
+        println("   ⏳ Waiting for page to load...")
+        wait_for_page_load(session)
+        
+        #= Get page source using source() function =#
+        html = source(session)
         
         if isnothing(html) || isempty(html)
             return nothing, "Empty response"
         end
         
-        if occursin("login", lowercase(html)) || occursin("sign in", lowercase(html))
-            return nothing, "Authentication required"
+        #= Check for login page =#
+        html_lower = lowercase(html)
+        if !has_scorecard_content(html_lower)
+            if occursin("login", html_lower) || occursin("sign in", html_lower) || occursin("password", html_lower)
+                return nothing, "Authentication required"
+            end
         end
+        
+        content_length = length(html)
+        println("   📊 Content Length: $content_length characters")
         
         return html, nothing
         
     catch e
         return nothing, string(e)
     end
+end
+
+#= wait_for_page_load(session; timeout)
+   Wait for page to fully load including dynamic content. =#
+function wait_for_page_load(session; timeout::Int = PAGE_LOAD_TIMEOUT)
+    start_time = time()
+    
+    while (time() - start_time) < timeout
+        try
+            #= Check document ready state =#
+            ready_state = script!(session, "return document.readyState")
+            
+            if ready_state == "complete"
+                #= Wait for dynamic content to render =#
+                sleep(8)
+                
+                html = source(session)
+                html_lower = lowercase(html)
+                
+                #= Check for actual scorecard content =#
+                if has_scorecard_content(html_lower)
+                    println("   ✅ Scorecard content detected")
+                    return true
+                end
+                
+                #= Wait more and check again =#
+                sleep(6)
+                html = source(session)
+                html_lower = lowercase(html)
+                
+                if has_scorecard_content(html_lower)
+                    println("   ✅ Scorecard content detected (after extra wait)")
+                    return true
+                end
+                
+                #= Fallback: ViewState present =#
+                if occursin("__VIEWSTATE", html)
+                    println("   ⚠️  ViewState detected but no scorecard content")
+                    return true
+                end
+                
+                return true
+            end
+        catch
+            #= Continue waiting =#
+        end
+        sleep(0.5)
+    end
+    
+    println("   ⚠️  Page load timeout")
+    return false
+end
+
+#= has_scorecard_content(html_lower)
+   Check if page has valid scorecard content. =#
+function has_scorecard_content(html_lower::String)::Bool
+    return occursin("supplier spend", html_lower) || 
+           occursin("ppm", html_lower) ||
+           occursin("dispatch precision", html_lower)
 end
 
 #= scrape_all_suppliers(workspace, parma_codes; headless)
